@@ -536,7 +536,7 @@ class Trader_Giveaway(Trader):
 class Trader_Insider(Trader):
     
     # assuming the equilibrium is at a 100
-    def getorder(self,time,countradown,lob):
+    def getorder(self,time,countdown,lob):
         if len(self.orders) < 1:
             order = None
         else:
@@ -557,6 +557,48 @@ class Trader_Insider(Trader):
             self.lastquote = order
         return order
 
+# predicts the equilibrium price rather than just set it to 100
+class Trader_InsiderPredict(Trader):
+    
+    def __init__(self, ttype, tid, balance, params, time):
+
+        self.equilibrium = 0 #equilibrium is the average of all trades that happened
+        self.numTrades = 0
+
+        super().__init__(ttype, tid, balance, params, time)
+    
+    def getorder(self,time,countdown,lob):
+        if len(self.orders) < 1:
+            order = None
+        else:
+            limitprice = self.orders[0].price
+            otype = self.orders[0].otype
+            
+            quoteprice = limitprice
+
+            # if Bid -> dont buy for higher than equilibrium
+            # if Ask -> dont sell for lower than equilibrium
+            if otype == 'Bid':
+                if limitprice > self.equilibrium:
+                    quoteprice = self.equilibrium
+            else:
+                if limitprice < self.equilibrium:
+                    quoteprice = self.equilibrium
+            order = Order(self.tid, otype, quoteprice, self.orders[0].qty, time,lob['QID'])
+            self.lastquote = order
+        return order
+    
+    
+    #modifies the equilibrium, keeps track of the last 100 trades
+    def respond(self, time, lob, trade, verbose):
+        #only change equilibrium if an actual trade has occured
+        if(trade):
+            tradeprice = trade['price']
+            self.n_trades += 1
+            self.equilibrium = (self.equilibrium * (self.n_trades-1)+tradeprice) /self.n_trades # running average
+            print("equlibrium = {}, number of trades = {}".format(self.equilibrium,self.n_trades))
+
+        return super().respond(time, lob, trade, verbose)
 
 # Trader subclass ZI-C
 # After Gode & Sunder 1993
@@ -1886,6 +1928,8 @@ def populate_market(traders_spec, traders, shuffle, verbose):
             return Trader_Giveaway('GVWY', name, balance, parameters, time0)
         elif robottype == 'INSD':
             return Trader_Insider('INSD', name, balance, parameters, time0)
+        elif robottype == 'INSDP':
+            return Trader_InsiderPredict('INSDP', name, balance, parameters, time0)
         elif robottype == 'ZIC':
             return Trader_ZIC('ZIC', name, balance, parameters, time0)
         elif robottype == 'SHVR':
@@ -2455,8 +2499,8 @@ if __name__ == "__main__":
     # Use 'periodic' if you want the traders' assignments to all arrive simultaneously & periodically
     #               'order_interval': 30, 'timemode': 'periodic'}
 
-    buyers_spec = [('GVWY',10),('SHVR',10),('ZIC',10),('ZIP',10),('INSD',10)]
-    sellers_spec = [('GVWY',10),('SHVR',10),('ZIC',10),('ZIP',10),('INSD',10)]
+    buyers_spec = [('GVWY',10),('SHVR',10),('ZIC',10),('ZIP',10),('INSDP',10)]
+    sellers_spec = [('GVWY',10),('SHVR',10),('ZIC',10),('ZIP',10),('INSDP',10)]
 
     #buyers_spec = [('GWVY',10),('SNPR',10)]
     #sellers_spec = [('GWVY',10),('SNPR',10)]

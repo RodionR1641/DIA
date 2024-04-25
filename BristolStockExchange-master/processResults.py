@@ -15,10 +15,10 @@ def average_profit5(numtrials):
                          names=list(string.ascii_uppercase)[0:24],\
                          index_col=False)
 
-        newNames = { "H":"GVWY", "L":"INSD", "P":"SHVR", "T":"ZIC", "X":"ZIP"}
+        newNames = { "H":"GVWY", "L":"INSDP", "P":"SHVR", "T":"ZIC", "X":"ZIP"}
         #newNames = {"H":"ZIP"}
         avgBalance.rename(columns=newNames,inplace=True)
-        avgBalance.plot(x="B",y=["GVWY","INSD","SHVR","ZIC","ZIP"], kind="line")
+        avgBalance.plot(x="B",y=["GVWY","INSDP","SHVR","ZIC","ZIP"], kind="line")
         #avgBalance.plot(x="B",y=["ZIP"])
         plt.xlabel("Time")
         plt.ylabel("Average Profit")
