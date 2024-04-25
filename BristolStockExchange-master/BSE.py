@@ -2321,6 +2321,7 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
     respond_verbose = False
     bookkeep_verbose = False
     populate_verbose = False
+    noise = True
 
     if dump_flags['dump_strats']:
         strat_dump = open(sess_id + '_strats.csv', 'w')
@@ -2390,10 +2391,16 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
         # if verbose: print('Trader Quote: %s' % (order))
 
         if order is not None:
+            if noise:
+                order.price = order.price + random.randrange(-5,5)
+            
+            # even though noise is added, dont make a loss compared to customer orders
             if order.otype == 'Ask' and order.price < traders[tid].orders[0].price:
-                sys.exit('Bad ask')
+                order.price = traders[tid].orders[0].price
+                #sys.exit('Bad ask')
             if order.otype == 'Bid' and order.price > traders[tid].orders[0].price:
-                sys.exit('Bad bid')
+                order.price = traders[tid].orders[0].price
+                #sys.exit('Bad bid')
             # send order to exchange
             traders[tid].n_quotes = 1
             trade = exchange.process_order2(time, order, process_verbose)

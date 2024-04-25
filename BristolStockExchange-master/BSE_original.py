@@ -296,7 +296,6 @@ class Exchange(Orderbook):
                 # bid lifts the best ask
                 if verbose:
                     print("Bid $%s lifts best ask" % oprice)
-                    print("Best bid = ${}, Best ask = ${}".format(best_bid,best_ask))
                 counterparty = best_ask_tid
                 price = best_ask  # bid crossed ask, so use ask price
                 if verbose:
@@ -310,7 +309,6 @@ class Exchange(Orderbook):
                 # ask hits the best bid
                 if verbose:
                     print("Ask $%s hits best bid" % oprice)
-                    print("Best bid = ${}, Best ask = ${}".format(best_bid,best_ask))
                 # remove the best bid
                 counterparty = best_bid_tid
                 price = best_bid  # ask crossed bid, so use bid price
@@ -558,31 +556,6 @@ class Trader_ZIC(Trader):
             self.lastquote = order
         return order
 
-#estimates the equilibrium price of the exchange
-class Trader_Insider(Trader):
-    
-    # assuming the equilibrium is at a 100
-    def getorder(self,time,countradown,lob):
-        if len(self.orders) < 1:
-            order = None
-        else:
-            limitprice = self.orders[0].price
-            otype = self.orders[0].otype
-            
-            quoteprice = limitprice
-
-            # if Bid -> dont buy for higher than 100
-            # if Ask -> dont sell for lower than 100
-            if otype == 'Bid':
-                if limitprice > 100:
-                    quoteprice = 100
-            else:
-                if limitprice < 100:
-                    quoteprice = 100
-            order = Order(self.tid, otype, quoteprice, self.orders[0].qty, time,lob['QID'])
-            self.lastquote = order
-        return order
-
 
 # Trader subclass Shaver
 # shaves a penny off the best price
@@ -647,6 +620,7 @@ class Trader_Sniper(Trader):
             order = Order(self.tid, otype, quoteprice, self.orders[0].qty, time, lob['QID'])
             self.lastquote = order
         return order
+
 
 # Trader subclass PRZI (ticker: PRSH)
 # added 6 Sep 2022 -- replaces old PRZI and PRZI_SHC, unifying them into one function and also adding PRDE
@@ -1823,7 +1797,6 @@ class Trader_ZIP(Trader):
         # return value of respond() tells caller whether to print a new frame of system-snapshot data
         return snapshot
 
-
 # ########################---trader-types have all been defined now--################
 
 
@@ -1856,12 +1829,10 @@ def trade_stats(expid, traders, dumpfile, time, lob):
     # second two columns of output are the LOB best bid and best offer (or 'None' if they're undefined)
     if lob['bids']['best'] is not None:
         dumpfile.write('%d, ' % (lob['bids']['best']))
-        #print("Best Bid now = $%s",lob['bids']['best'])
     else:
         dumpfile.write('None, ')
     if lob['asks']['best'] is not None:
         dumpfile.write('%d, ' % (lob['asks']['best']))
-        #print("Best Ask now = $%s",lob['asks']['best'])
     else:
         dumpfile.write('None, ')
 
@@ -1904,8 +1875,6 @@ def populate_market(traders_spec, traders, shuffle, verbose):
             return Trader_PRZI('PRSH', name, balance, parameters, time0)
         elif robottype == 'PRDE':
             return Trader_PRZI('PRDE', name, balance, parameters, time0)
-        elif robottype == 'INSD':
-            return Trader_Insider('INSD', name, balance, parameters, time0)
         else:
             sys.exit('FATAL: don\'t know robot type %s\n' % robottype)
 
@@ -2277,9 +2246,9 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
 
     orders_verbose = False
     lob_verbose = False
-    process_verbose = True
+    process_verbose = False
     respond_verbose = False
-    bookkeep_verbose = True
+    bookkeep_verbose = False
     populate_verbose = False
 
     if dump_flags['dump_strats']:
@@ -2415,7 +2384,7 @@ if __name__ == "__main__":
 
     # set up common parameters for all market sessions
     # 1000 days is good, but 3*365=1095, so may as well go for three years.
-    n_days =  0.001 #original = 10  
+    n_days = 10
     start_time = 0.0
     end_time = 60.0 * 60.0 * 24 * n_days
     duration = end_time - start_time
@@ -2450,8 +2419,8 @@ if __name__ == "__main__":
     range2 = (50, 150)
     demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
 
-    # new customer orders arrive at each trader approx once every order_interval seconds, replaces the old orders
-    order_interval = 15 # original = 15
+    # new customer orders arrive at each trader approx once every order_interval seconds
+    order_interval = 15
 
     order_sched = {'sup': supply_schedule, 'dem': demand_schedule,
                    'interval': order_interval, 'timemode': 'drip-poisson'}
@@ -2459,40 +2428,37 @@ if __name__ == "__main__":
     # Use 'periodic' if you want the traders' assignments to all arrive simultaneously & periodically
     #               'order_interval': 30, 'timemode': 'periodic'}
 
-    buyers_spec = [('GVWY',10),('SHVR',10),('ZIC',10),('ZIP',10),('INSD',10)]
-    sellers_spec = [('GVWY',10),('SHVR',10),('ZIC',10),('ZIP',10),('INSD',10)]
+    # buyers_spec = [('GVWY',10),('SHVR',10),('ZIC',10),('ZIP',10)]
+    # sellers_spec = [('GVWY',10),('SHVR',10),('ZIC',10),('ZIP',10)]
 
-    #buyers_spec = [(('ZIP',31))] #31 giveaway traders and buyers
-    #sellers_spec = [(('ZIP',31))]
-
-    #opponent = 'GVWY'
-    #opp_N = 30
+    opponent = 'GVWY'
+    opp_N = 30
 #    sellers_spec = [('PRSH', 30),(opponent, opp_N-1)]
 #    buyers_spec = [(opponent, opp_N)]
 
 
     # run a sequence of trials, one session per trial
 
-    verbose = True
+    verbose = False
 
     # n_trials is how many trials (i.e. market sessions) to run in total
-    n_trials = 1
+    n_trials = 5
 
     # n_recorded is how many trials (i.e. market sessions) to write full data-files for
-    n_trials_recorded = 2
+    n_trials_recorded = 5
 
-    trial = 2
+    trial = 1
 
     while trial < (n_trials+1):
 
         # create unique i.d. string for this trial
         trial_id = 'bse_d%03d_i%02d_%04d' % (n_days, order_interval, trial)
 
-        #buyers_spec = [('ZIPSH', 10, {'k': 4})]
-        #sellers_spec = [('ZIPSH', 10, {'k': 4})]
+        buyers_spec = [('ZIPSH', 10, {'k': 4})]
+        sellers_spec = [('ZIPSH', 10, {'k': 4})]
 
-        #buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
-        #sellers_spec = buyers_spec
+        buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
+        sellers_spec = buyers_spec
 
         traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 
