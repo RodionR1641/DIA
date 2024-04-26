@@ -2772,16 +2772,20 @@ if __name__ == "__main__":
     # introducing two "market shocks"
     # -- here the timings of the shocks are at 1/3 and 2/3 into the duration of the session.
     #
-    # supply_schedule = [ {'from':start_time, 'to':duration/3, 'ranges':[range1], 'stepmode':'fixed'},
-    #                     {'from':duration/3, 'to':2*duration/3, 'ranges':[range2], 'stepmode':'fixed'},
-    #                     {'from':2*duration/3, 'to':end_time, 'ranges':[range1], 'stepmode':'fixed'}
-    #                   ]
-
+    
     range1 = (50, 150)
-    supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
+    range2 = (200,300)
+    #introducing a shock in the schedules
+    supply_schedule = [ {'from':start_time, 'to':duration/3, 'ranges':[range1], 'stepmode':'fixed'},
+                         {'from':duration/3, 'to':2*duration/3, 'ranges':[range2], 'stepmode':'fixed'},
+                         {'from':2*duration/3, 'to':end_time, 'ranges':[range1], 'stepmode':'fixed'}
+                       ]
+    demand_schedule = supply_schedule
 
-    range2 = (50, 150)
-    demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
+    #supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
+
+    #range2 = (50, 150)
+    #demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
 
     # new customer orders arrive at each trader approx once every order_interval seconds
     order_interval = 5
