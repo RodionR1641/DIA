@@ -67,5 +67,5 @@ def bidAsk_time(numtrials):
 def show_transactions():
     pass
 
-average_profit5(2)
-#bidAsk_time()
+#average_profit5(2)
+bidAsk_time(1)

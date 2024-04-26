@@ -279,7 +279,11 @@ class Exchange(Orderbook):
     def process_order2(self, time, order, verbose):
         # receive an order and either add it to the relevant LOB (ie treat as limit order)
         # or if it crosses the best counterparty offer, execute it (treat as a market order)
+        
+        order.price += random.randint(-5,5) 
         oprice = order.price
+        
+        
         counterparty = None
         price = None
         [qid, response] = self.add_order(order, verbose)  # add it to the order lists -- overwriting any previous order
@@ -2384,7 +2388,7 @@ if __name__ == "__main__":
 
     # set up common parameters for all market sessions
     # 1000 days is good, but 3*365=1095, so may as well go for three years.
-    n_days = 10
+    n_days = 0.01
     start_time = 0.0
     end_time = 60.0 * 60.0 * 24 * n_days
     duration = end_time - start_time
