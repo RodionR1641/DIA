@@ -434,6 +434,7 @@ class Trader:
         self.profit_mintime = 60    # minimum duration in seconds for calculating profitpertime
         self.n_trades = 0           # how many trades has this trader done?
         self.lastquote = None       # record of what its last quote was
+        self.distance = random.randint(1,5) # random distance to the exchange, 5 being the closest and 1 the furthest away 
 
     def __str__(self):
         return '[TID %s type %s balance %s blotter %s orders %s n_trades %s profitpertime %s]' \
@@ -568,7 +569,7 @@ class Trader_InsiderPredict(Trader):
     def __init__(self, ttype, tid, balance, params, time):
 
         self.equilibrium = 0 #equilibrium is the average of all trades that happened
-        self.numTrades = 0
+        self.numTrades = 0 #number of trades it sees happen
 
         super().__init__(ttype, tid, balance, params, time)
     
@@ -599,13 +600,64 @@ class Trader_InsiderPredict(Trader):
         #only change equilibrium if an actual trade has occured
         if(trade):
             tradeprice = trade['price']
-            self.n_trades += 1
-            self.equilibrium = (self.equilibrium * (self.n_trades-1)+tradeprice) /self.n_trades # running average
-            print("equlibrium = {}, number of trades = {}".format(self.equilibrium,self.n_trades))
+            self.numTrades += 1
+            self.equilibrium = (self.equilibrium * (self.numTrades-1)+tradeprice) /self.numTrades # running average
+            #print("equlibrium = {}, number of trades = {}".format(self.equilibrium,self.numTrades))
 
         #return super().respond(time, lob, trade, verbose)
         self.profitpertime = self.profitpertime_update(time, self.birthtime, self.balance)
 
+
+# predicts equilibrium from x last traders instead of all, deals better with market shocks
+class Trader_InsiderPredict2(Trader):
+    
+    def __init__(self, ttype, tid, balance, params, time):
+
+        self.equilibrium = 0 #equilibrium is the average of all trades that happened
+        self.track_num = 15 #number of recent trades to keep track of 
+        self.trades_track = []
+
+        super().__init__(ttype, tid, balance, params, time)
+    
+    def getorder(self,time,countdown,lob):
+        if len(self.orders) < 1:
+            order = None
+        else:
+            limitprice = self.orders[0].price
+            otype = self.orders[0].otype
+            
+            quoteprice = limitprice
+
+            # if Bid -> dont buy for higher than equilibrium
+            # if Ask -> dont sell for lower than equilibrium
+            if otype == 'Bid':
+                if limitprice > self.equilibrium:
+                    quoteprice = self.equilibrium
+            else:
+                if limitprice < self.equilibrium:
+                    quoteprice = self.equilibrium
+            order = Order(self.tid, otype, quoteprice, self.orders[0].qty, time,lob['QID'])
+            self.lastquote = order
+        return order
+    
+    
+    #modifies the equilibrium, keeps track of the last 100 trades
+    def respond(self, time, lob, trade, verbose):
+        #only change equilibrium if an actual trade has occured
+        if(trade):
+            tradeprice = trade['price']
+
+            self.trades_track.append(tradeprice)
+            if(len(self.trades_track) > self.track_num):
+                self.trades_track = self.trades_track[1:] #if the number of trades exceeds track_num, remove the oldest
+                #trade from the list
+
+            #equilibrium is the average of these trades
+            self.equilibrium = sum(self.trades_track) / len(self.trades_track)
+            #print("equlibrium = {}".format(self.equilibrium))
+
+        #return super().respond(time, lob, trade, verbose)
+        self.profitpertime = self.profitpertime_update(time, self.birthtime, self.balance)
 
 # Trader subclass ZI-C
 # After Gode & Sunder 1993
@@ -2210,7 +2262,7 @@ def populate_market(traders_spec, traders, shuffle, verbose):
         elif robottype == 'INSD':
             return Trader_Insider('INSD', name, balance, parameters, time0)
         elif robottype == 'INSDP':
-            return Trader_InsiderPredict('INSDP', name, balance, parameters, time0)
+            return Trader_InsiderPredict2('INSDP', name, balance, parameters, time0)
         elif robottype == 'ZIC':
             return Trader_ZIC('ZIC', name, balance, parameters, time0)
         elif robottype == 'SHVR':
@@ -2628,6 +2680,10 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
     traders = {}
     trader_stats = populate_market(trader_spec, traders, True, populate_verbose)
 
+    sum_probabilities = 0
+    for trader,value in traders.items():
+        sum_probabilities += value.distance
+
     # timestep set so that can process all traders in one second
     # NB minimum interarrival time of customer orders may be much less than this!!
     timestep = 1.0 / float(trader_stats['n_buyers'] + trader_stats['n_sellers'])
@@ -2668,7 +2724,22 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
                     exchange.del_order(time, traders[kill].lastquote, verbose)
 
         # get a limit-order quote (or None) from a randomly chosen trader
-        tid = list(traders.keys())[random.randint(0, len(traders) - 1)]
+        
+        # time delays simulation added to traders - some traders are closer to the exchange and so have higher
+        # probability of being picked
+        random_prob = random.randint(0,sum_probabilities)
+        cumulative_sum = 0
+        for trader,value in traders.items():
+            cumulative_sum += value.distance
+            if(cumulative_sum >= random_prob):
+                tid = trader #trader is the tid as its a key
+                break
+
+        #tid = list(traders.keys())[random.randint(0, len(traders) - 1)]
+        
+        
+        
+        
         order = traders[tid].getorder(time, time_left, exchange.publish_lob(time, lobframes, lob_verbose))
 
         # if verbose: print('Trader Quote: %s' % (order))
@@ -2773,8 +2844,8 @@ if __name__ == "__main__":
     # -- here the timings of the shocks are at 1/3 and 2/3 into the duration of the session.
     #
     
-    range1 = (50, 150)
-    range2 = (200,300)
+    range1 = (50, 150, schedule_offsetfn)
+    range2 = (200,300, schedule_offsetfn)
     #introducing a shock in the schedules
     supply_schedule = [ {'from':start_time, 'to':duration/3, 'ranges':[range1], 'stepmode':'fixed'},
                          {'from':duration/3, 'to':2*duration/3, 'ranges':[range2], 'stepmode':'fixed'},
@@ -2796,8 +2867,8 @@ if __name__ == "__main__":
     # Use 'periodic' if you want the traders' assignments to all arrive simultaneously & periodically
     #               'order_interval': 30, 'timemode': 'periodic'}
 
-    buyers_spec = [('GVWY',10),('SHVR',10),('ZIC',10),('ZIP',10),('INSDP',10)]
-    sellers_spec = [('GVWY',10),('SHVR',10),('ZIC',10),('ZIP',10),('INSDP',10)]
+    buyers_spec = [('GVWY',1),('SHVR',10),('ZIC',10),('ZIP',10),('INSDP',10)]
+    sellers_spec = [('GVWY',1),('SHVR',10),('ZIC',10),('ZIP',10),('INSDP',10)]
 
     #buyers_spec = [('GWVY',10),('SNPR',10)]
     #sellers_spec = [('GWVY',10),('SNPR',10)]
@@ -2810,7 +2881,7 @@ if __name__ == "__main__":
 
     # run a sequence of trials, one session per trial
 
-    verbose = False
+    verbose = True
 
     # n_trials is how many trials (i.e. market sessions) to run in total
     n_trials = 2
