@@ -649,8 +649,8 @@ class Trader_InsiderPredict2(Trader):
 
             self.trades_track.append(tradeprice)
             if(len(self.trades_track) > self.track_num):
-                self.trades_track = self.trades_track[1:] #if the number of trades exceeds track_num, remove the oldest
-                #trade from the list
+                self.trades_track = self.trades_track[1:] #if the number of trades exceeds track_num, 
+                #remove the oldest trade from the list
 
             #equilibrium is the average of these trades
             self.equilibrium = sum(self.trades_track) / len(self.trades_track)
@@ -1620,7 +1620,7 @@ class Trader_ZIP(Trader):
 
             self.price = quoteprice
             order = Order(self.tid, self.job, quoteprice, self.orders[0].qty, time, lob['QID'])
-            self.lastquote = order
+            self.lastquote = order #this now becomes the new lastquote
 
             if self.logging and order.price != lastprice:
                 self.logfile.write('%f, Order:, %s\n' % (time, str(order)))
@@ -2819,7 +2819,7 @@ if __name__ == "__main__":
 
     # set up common parameters for all market sessions
     # 1000 days is good, but 3*365=1095, so may as well go for three years.
-    n_days = 0.001
+    n_days = 0.00694 # 600 seconds
     start_time = 0.0
     end_time = 60.0 * 60.0 * 24 * n_days
     duration = end_time - start_time
@@ -2867,8 +2867,8 @@ if __name__ == "__main__":
     # Use 'periodic' if you want the traders' assignments to all arrive simultaneously & periodically
     #               'order_interval': 30, 'timemode': 'periodic'}
 
-    buyers_spec = [('GVWY',1),('SHVR',10),('ZIC',10),('ZIP',10),('INSDP',10)]
-    sellers_spec = [('GVWY',1),('SHVR',10),('ZIC',10),('ZIP',10),('INSDP',10)]
+    buyers_spec = [('GVWY',5),('SHVR',5),('ZIC',5),('ZIP',5),('INSDP',5),('SNPR',5)]
+    sellers_spec = [('GVWY',5),('SHVR',5),('ZIC',5),('ZIP',5),('INSDP',5),('SNPR',5)]
 
     #buyers_spec = [('GWVY',10),('SNPR',10)]
     #sellers_spec = [('GWVY',10),('SNPR',10)]
@@ -2884,10 +2884,10 @@ if __name__ == "__main__":
     verbose = True
 
     # n_trials is how many trials (i.e. market sessions) to run in total
-    n_trials = 2
+    n_trials = 500
 
     # n_recorded is how many trials (i.e. market sessions) to write full data-files for
-    n_trials_recorded = 2
+    n_trials_recorded = 500
 
     trial = 1
 
