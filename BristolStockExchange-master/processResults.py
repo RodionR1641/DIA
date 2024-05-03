@@ -4,11 +4,13 @@ import matplotlib.pyplot as plt
 
 print(list(string.ascii_uppercase)[0:24])
 
-#draw a graph of average profit over time for each trader type
-def average_profit6(numtrials,n_days,order_interval):
+df = None # global dataframe of average values
+
+#get the average dataframe of average profit over time for each trader type
+def average_data_6(numtrials,n_days,order_interval):
 
     data_frames = [] # list of all data frames we read from CSVs of all trials 
-    newNames = { "H":"GVWY", "L":"INSDP", "P":"SHVR", "T":"SNPR", "X":"ZIC", "AB":"ZIP"}
+    newNames = { "B":"TIME", "C":"BID", "D":"ASK" ,"H":"GVWY", "L":"INSDP", "P":"SHVR", "T":"SNPR", "X":"ZIC", "AB":"ZIP"}
 
     #reading all the dataframes
     for i in range(1,numtrials+1):
@@ -29,9 +31,9 @@ def average_profit6(numtrials,n_days,order_interval):
         
     pad_frames = pad_dataframes(data_frames)
 
-    max_row = pad_frames[0].shape[0]
+    max_row = pad_frames[0].shape[0] # max row of the dataframe 
     #generating the average graph
-
+    global df
     df = pd.DataFrame(columns=pad_frames[0].columns) #new dataframe with same column structure
     for i in range(max_row):
         #getting average of columns B, H, L, P, T, X, AB
@@ -39,22 +41,16 @@ def average_profit6(numtrials,n_days,order_interval):
         df.loc[i] = average_row
 
 
-    df.plot(x="B",y=["GVWY","INSDP","SHVR","SNPR","ZIC","ZIP"], kind="line") 
-
-    plt.xlabel("Time")
-    plt.ylabel("Average Profit")
-    plt.title("500 runs of 6 trader types, 5 sellers and 5 buyers each")
-    plt.show(block=True)
-
-
 def get_average(row_num,pad_frames):
     
-    column_values = {"B":0,"GVWY":0,"INSDP":0,"SHVR":0,"SNPR":0,"ZIC":0,"ZIP":0}
+    column_values = {"TIME":0,"BID":0,"ASK":0,"GVWY":0,"INSDP":0,"SHVR":0,"SNPR":0,"ZIC":0,"ZIP":0}
     
     #total of each column we care about to then make an average of all dataframes
     for frame in pad_frames:
         row = frame.loc[row_num]
-        column_values["B"] += row["B"]
+        column_values["TIME"] += row["TIME"]
+        column_values["BID"] += row["BID"]
+        column_values["ASK"] += row["ASK"]
         column_values["GVWY"] += row["GVWY"]
         column_values["INSDP"] += row["INSDP"]
         column_values["SHVR"] += row["SHVR"]
@@ -71,7 +67,10 @@ def get_average(row_num,pad_frames):
     row = pad_frames[0].loc[row_num]
     new_row = row.copy()
     #replacing the values with the averages now
-        
+    
+    new_row["TIME"] = column_values["TIME"]
+    new_row["BID"] = column_values["BID"]
+    new_row["ASK"] = column_values["ASK"]
     new_row["GVWY"] = column_values["GVWY"]
     new_row["INSDP"] = column_values["INSDP"]
     new_row["SHVR"] = column_values["SHVR"]
@@ -101,25 +100,6 @@ def average_profit4(numtrials):
         plt.title("62 ZIP traders over 180 seconds")
         plt.show(block=True)
 
-#draw a graph of best bid and ask over time
-def bidAsk_time(numtrials):
-
-    for i in range(1,numtrials+1):
-        
-        csv_str = "bse_d000_i05_{}_avg_balance.csv".format("000"+str(i))
-
-        avgBalance = pd.read_csv(csv_str,header=None,\
-                         names=list(string.ascii_uppercase)[0:24],\
-                         index_col=False)
-
-        newNames = {"C":"Bid", "D":"Ask"}
-        avgBalance.rename(columns=newNames,inplace=True)
-
-        avgBalance.plot(x="B",y=["Bid","Ask"])
-        plt.xlabel("Time")
-        plt.title("Best Bid and Ask for 62 ZIP traders")
-        plt.show(block=True)
-
 
 def pad_dataframes(data_frames):
     max_row = 0
@@ -141,9 +121,50 @@ def pad_dataframes(data_frames):
             data_frames[i] = new_df
     return data_frames
 
+
+#draw a graph of best bid and ask over time
+def bidAsk_time(numtrials):
+
+    for i in range(1,numtrials+1):
+        
+        csv_str = "bse_d000_i05_{}_avg_balance.csv".format("000"+str(i))
+
+        avgBalance = pd.read_csv(csv_str,header=None,\
+                         names=list(string.ascii_uppercase)[0:24],\
+                         index_col=False)
+
+        newNames = {"C":"Bid", "D":"Ask"}
+        avgBalance.rename(columns=newNames,inplace=True)
+
+        avgBalance.plot(x="B",y=["Bid","Ask"])
+        plt.xlabel("Time")
+        plt.title("Best Bid and Ask for 62 ZIP traders")
+        plt.show(block=True)
+
+def average_graph6():
+
+
+    df.plot(x="TIME",y=["GVWY","INSDP","SHVR","SNPR","ZIC","ZIP"], kind="line") 
+
+    plt.xlabel("Time")
+    plt.ylabel("Average Profit")
+    plt.title("500 runs of 6 trader types, 5 sellers and 5 buyers each")
+    plt.show(block=True)
+
+def average_equilibrium6():
+    df.plot(x="TIME",y=["BID","ASK"], kind="line")
+
+    plt.xlabel("Time")
+    plt.ylabel("Best Bid and Ask in system")
+    plt.title("500 runs of 6 trader types, 5 sellers and 5 buyers each")
+    plt.show(block=True)
+
 # showing history of transactions, crossed graphs in pdf
 def show_transactions():
     pass
 
-average_profit6(100,0.01,5)
+average_data_6(100,0.01,5)
+average_graph6()
+average_equilibrium6()
+#average_profit6(100,0.01,5)
 #bidAsk_time(1)
