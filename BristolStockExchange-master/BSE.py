@@ -2656,8 +2656,12 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
     respond_verbose = False
     bookkeep_verbose = False
     populate_verbose = False
-    noise = False
-
+    noise = 0 # indicates the range of noise
+    random_range_noise = False # indicates if the range of the noise added is random or not i.e. the bounds of the 
+    #range are random too
+    time_delays = False # simulated time delays where some traders are closer to the exchange so are more likely to be 
+    #selected
+ 
     if dump_flags['dump_strats']:
         strat_dump = open(sess_id + '_strats.csv', 'w')
     else:
@@ -2680,6 +2684,7 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
     traders = {}
     trader_stats = populate_market(trader_spec, traders, True, populate_verbose)
 
+    # sum of all "distances" to the exchange, used to generate a random number and choose a random trader
     sum_probabilities = 0
     for trader,value in traders.items():
         sum_probabilities += value.distance
@@ -2725,38 +2730,47 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
 
         # get a limit-order quote (or None) from a randomly chosen trader
         
-        # time delays simulation added to traders - some traders are closer to the exchange and so have higher
-        # probability of being picked
-        random_prob = random.randint(0,sum_probabilities)
-        cumulative_sum = 0
-        for trader,value in traders.items():
-            cumulative_sum += value.distance
-            if(cumulative_sum >= random_prob):
-                tid = trader #trader is the tid as its a key
-                break
-
-        #tid = list(traders.keys())[random.randint(0, len(traders) - 1)]
         
-        
-        
+        if(time_delays):
+            # time delays simulation added to traders - some traders are closer to the exchange and so have higher
+            # probability of being picked
+            random_prob = random.randint(0,sum_probabilities)
+            cumulative_sum = 0
+            for trader,value in traders.items():
+                cumulative_sum += value.distance
+                if(cumulative_sum >= random_prob):
+                    tid = trader #trader is the tid as its a key
+                    break
+        else:
+            # choosing a random trader, equal probability for everyone
+            tid = list(traders.keys())[random.randint(0, len(traders) - 1)]
         
         order = traders[tid].getorder(time, time_left, exchange.publish_lob(time, lobframes, lob_verbose))
 
         # if verbose: print('Trader Quote: %s' % (order))
 
         if order is not None:
-            if noise:
-                order.price = order.price + random.randint(-5,5) #between -5 and 5 inclusive
+            if noise>0:
+                if random_range_noise:
+                    # random number in a range defined by 2 random numbers between -noise and noise
+                    lower = random.randint(-noise,noise)
+                    upper = random.randint(-noise,noise)
 
+                    if lower > upper:
+                        lower, upper = upper, lower # swap values around to still generate a valid range
+                    order.price = order.price + random.randint(lower,upper)
+                else:
+                    order.price = order.price + random.randint(-noise,noise) #between -noise and noise inclusive
+            
             # even though noise is added, dont make a loss compared to customer orders
             if order.otype == 'Ask' and order.price < traders[tid].orders[0].price:
-                order.price = traders[tid].orders[0].price
-                if not noise:
+                order.price = traders[tid].orders[0].price # just set it equal to the customer limit price
+                if noise == 0:
                     sys.exit('Bad ask')
             
             if order.otype == 'Bid' and order.price > traders[tid].orders[0].price:
-                order.price = traders[tid].orders[0].price
-                if not noise:
+                order.price = traders[tid].orders[0].price # just set it equal to the customer limit price
+                if noise == 0:
                     sys.exit('Bad bid')
             # send order to exchange
             traders[tid].n_quotes = 1
@@ -2823,6 +2837,7 @@ if __name__ == "__main__":
     start_time = 0.0
     end_time = 60.0 * 60.0 * 24 * n_days
     duration = end_time - start_time
+    market_shock = False # introduces a shock to customer orders that changes the equilibrium price
 
     # schedule_offsetfn returns time-dependent offset, to be added to schedule prices
     def schedule_offsetfn(t):
@@ -2844,25 +2859,32 @@ if __name__ == "__main__":
     # -- here the timings of the shocks are at 1/3 and 2/3 into the duration of the session.
     #
     
-    range1 = (50, 150, schedule_offsetfn)
-    range2 = (200,300, schedule_offsetfn)
-    #introducing a shock in the schedules
-    supply_schedule = [ {'from':start_time, 'to':duration/3, 'ranges':[range1], 'stepmode':'fixed'},
-                         {'from':duration/3, 'to':2*duration/3, 'ranges':[range2], 'stepmode':'fixed'},
-                         {'from':2*duration/3, 'to':end_time, 'ranges':[range1], 'stepmode':'fixed'}
-                       ]
-    demand_schedule = supply_schedule
+    range1 = (50, 150) # can include schedule_offsetfn for more uncertainty
+    range2 = (200,300)
+    
+    # stepmodes tell how prices should be generated 
+    available_stepmodes = ['fixed','random','jittered'] 
+    # timemodes indicate the time distribution of new customer orders
+    available_timemodes = ['periodic','drip-fixed','drip-jitter','drip-poisson']
 
-    #supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
+    if market_shock:
+        #introducing a shock in the schedules
+        supply_schedule = [ {'from':start_time, 'to':duration/3, 'ranges':[range1], 'stepmode':available_stepmodes[0]},
+                            {'from':duration/3, 'to':2*duration/3, 'ranges':[range2], 'stepmode':available_stepmodes[0]},
+                            {'from':2*duration/3, 'to':end_time, 'ranges':[range1], 'stepmode':available_stepmodes[0]}
+                        ]
+    else:
+        supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': available_stepmodes[0]}]
+    demand_schedule = supply_schedule
 
     #range2 = (50, 150)
     #demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
 
     # new customer orders arrive at each trader approx once every order_interval seconds
-    order_interval = 5
+    order_interval = 15
 
     order_sched = {'sup': supply_schedule, 'dem': demand_schedule,
-                   'interval': order_interval, 'timemode': 'drip-poisson'}
+                   'interval': order_interval, 'timemode': available_timemodes[0]}
 
     # Use 'periodic' if you want the traders' assignments to all arrive simultaneously & periodically
     #               'order_interval': 30, 'timemode': 'periodic'}
