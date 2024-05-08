@@ -9,10 +9,10 @@ print(list(string.ascii_uppercase)[0:24])
 def average_data_6(numtrials,n_days,order_interval):
 
     data_frames = [] # list of all data frames we read from CSVs of all trials 
-    newNames = { "B":"TIME", "C":"BID", "D":"ASK" ,"H":"GVWY", "L":"INSDP", "P":"SHVR", "T":"SNPR", "X":"ZIC", "AB":"ZIP"}
 
+    newNames={ "B":"TIME", "C":"BID", "D":"ASK" ,"H":"GVWY", "L":"INSDP", "P":"SHVR", "T":"SNPR", "X":"ZIC","AB":"ZIP"}
     #reading all the dataframes
-    for i in range(1,numtrials+1): # +1 to get the last trial in e.g. 200
+    for i in range(1,numtrials+1): # +1 to get the last trial e.g. 200
         
         trial_id = 'bse_d%03d_i%02d_%04d' % (n_days, order_interval, i)
 
@@ -62,7 +62,7 @@ def get_average(row_num,pad_frames):
     for key in column_values:
         column_values[key] /= divisor # making each value an average
     
-    #take any row to change
+    #take first row to change
     row = pad_frames[0].loc[row_num]
     new_row = row.copy()
     #replacing the values with the averages now
@@ -80,24 +80,77 @@ def get_average(row_num,pad_frames):
 
     return new_row
 
-def average_profit4(numtrials):
-    for i in range(1,numtrials+1):
+# get average data of traders differentiated by 5 distance values
+def average_data_distance(numtrials,n_days,order_interval):
+    data_frames = [] # list of all data frames we read from CSVs of all trials 
 
-        csv_str = "bse_d000_i05_{}_avg_balance.csv".format("000"+str(i))
+    newNames={ "B":"TIME", "C":"BID", "D":"ASK" ,"H":"Distance_1", "L":"Distance_2", "P":"Distance_3", 
+              "T":"Distance_4", "X":"Distance_5"}
+    #reading all the dataframes
+    for i in range(1,numtrials+1): # +1 to get the last trial e.g. 200
+        
+        trial_id = 'bse_d%03d_i%02d_%04d' % (n_days, order_interval, i)
 
-        avgBalance = pd.read_csv(csv_str,header=None,\
+
+        csv_str = trial_id +"_avg_balance.csv" # getting each CSV
+
+        #need up to 28 columns for 6 traders
+        avg_balance_trial = pd.read_csv(csv_str,header=None,\
                          names=list(string.ascii_uppercase)[0:24],\
                          index_col=False)
 
-        newNames = { "H":"GVWY", "L":"SHVR", "P":"ZIC", "T":"ZIP"}
-        #newNames = {"H":"ZIP"}
-        avgBalance.rename(columns=newNames,inplace=True)
-        avgBalance.plot(x="B",y=["GVWY","SHVR","ZIC","ZIP"], kind="line")
-        #avgBalance.plot(x="B",y=["ZIP"])
-        plt.xlabel("Time")
-        plt.ylabel("Average Profit")
-        plt.title("6 trader types, 5 sellers and 5 buyers each over 180 seconds")
-        plt.show(block=True)
+        avg_balance_trial.rename(columns=newNames,inplace=True)
+        
+        data_frames.append(avg_balance_trial)
+        
+    pad_frames = pad_dataframes(data_frames)
+
+    max_row = pad_frames[0].shape[0] # max row of the dataframe 
+    #generating the average graph
+    data_frame = pd.DataFrame(columns=pad_frames[0].columns) #new dataframe with same column structure
+    for i in range(max_row):
+        #getting average of columns B, H, L, P, T, X
+        average_row = get_average_distance(i,pad_frames)
+        data_frame.loc[i] = average_row
+    return data_frame
+
+def get_average_distance(row_num,pad_frames):
+    column_values = {"TIME":0,"BID":0,"ASK":0,"Distance_1":0,"Distance_2":0,"Distance_3":0,
+                     "Distance_4":0,"Distance_5":0}
+    
+    #total of each column we care about to then make an average of all dataframes
+    for frame in pad_frames:
+        row = frame.loc[row_num]
+        column_values["TIME"] += row["TIME"]
+        column_values["BID"] += row["BID"]
+        column_values["ASK"] += row["ASK"]
+        column_values["Distance_1"] += row["Distance_1"]
+        column_values["Distance_2"] += row["Distance_2"]
+        column_values["Distance_3"] += row["Distance_3"]
+        column_values["Distance_4"] += row["Distance_4"]
+        column_values["Distance_5"] += row["Distance_5"]
+    
+    divisor = len(pad_frames)
+
+    for key in column_values:
+        column_values[key] /= divisor # making each value an average
+    
+    #take first row to change
+    row = pad_frames[0].loc[row_num]
+    new_row = row.copy()
+    #replacing the values with the averages now
+    
+    new_row["TIME"] = column_values["TIME"]
+    new_row["BID"] = column_values["BID"]
+    new_row["ASK"] = column_values["ASK"]
+    new_row["Distance_1"] = column_values["Distance_1"]
+    new_row["Distance_2"] = column_values["Distance_2"]
+    new_row["Distance_3"] = column_values["Distance_3"]
+    new_row["Distance_4"] = column_values["Distance_4"]
+    new_row["Distance_5"] = column_values["Distance_5"]
+    # now returning an average row
+
+    return new_row
 
 
 def pad_dataframes(data_frames):
@@ -140,18 +193,22 @@ def bidAsk_time(numtrials,n_days,order_interval):
         plt.title("Best Bid and Ask for 6 trader types, 5 sellers and 5 buyers each")
         plt.show(block=True)
 
-def average_graph6(data_frame, **kwargs):
 
 
-    data_frame.plot(x="TIME",y=["GVWY","INSDP","SHVR","SNPR","ZIC","ZIP"], kind="line") 
+def average_graph6(data_frame, time_delay_test=False, **kwargs):
+
+    if(time_delay_test):
+        data_frame.plot(x="TIME",y=["Distance_1","Distance_2","Distance_3","Distance_4","Distance_5"], kind="line")
+        plt.title("500 runs of 6 trader types, 5 sellers and 5 buyers each with time delays. Showing effects on "+
+                    "performance by distance to exchange")
+    else:
+        plt.title("500 runs of 6 trader types, 5 sellers and 5 buyers each")    
+        data_frame.plot(x="TIME",y=["GVWY","INSDP","SHVR","SNPR","ZIC","ZIP"], kind="line") 
 
     plt.xlabel("Time")
     plt.ylabel("Average Profit")
     
-    if(len(kwargs) == 0):
-        #normal graph without display effects of noise/uncertainty
-        plt.title("500 runs of 6 trader types, 5 sellers and 5 buyers each")
-    else:
+    if(len(kwargs) > 0):
         for key,value in kwargs.items():
             if(key=="noise"):
                 plt.title("500 runs of 6 trader types, 5 sellers and 5 buyers each with noise = {}".format(value))
@@ -160,7 +217,7 @@ def average_graph6(data_frame, **kwargs):
 
     plt.show(block=True)
 
-def average_equilibrium6(data_frame, **kwargs):
+def average_equilibrium(data_frame, **kwargs):
     data_frame.plot(x="TIME",y=["BID","ASK"], kind="line")
 
     plt.xlabel("Time")
@@ -173,6 +230,8 @@ def average_equilibrium6(data_frame, **kwargs):
         for key,value in kwargs.items():
             if(key=="market_shock"):
                 plt.title("500 runs of 6 trader types, 5 sellers and 5 buyers each with market shock")
+            elif(key=="time_delay_test"):
+                plt.title("500 runs of 6 trader types, 5 sellers and 5 buyers each with time delays")
 
     plt.show(block=True)
 

@@ -421,7 +421,7 @@ class Exchange(Orderbook):
 # all Traders have a trader id, bank balance, blotter, and list of orders to execute
 class Trader:
 
-    def __init__(self, ttype, tid, balance, params, time):
+    def __init__(self, ttype, tid, balance, params, time, distance):
         self.ttype = ttype          # what type / strategy this trader is
         self.tid = tid              # trader unique ID code
         self.balance = balance      # money in the bank
@@ -435,7 +435,8 @@ class Trader:
         self.profit_mintime = 60    # minimum duration in seconds for calculating profitpertime
         self.n_trades = 0           # how many trades has this trader done?
         self.lastquote = None       # record of what its last quote was
-        self.distance = random.randint(1,5) # random distance to the exchange, 5 being the closest and 1 the furthest away 
+        self.distance = distance # random distance to the exchange, 
+        #5 being the closest and 1 the furthest away 
 
     def __str__(self):
         return '[TID %s type %s balance %s blotter %s orders %s n_trades %s profitpertime %s]' \
@@ -612,13 +613,13 @@ class Trader_InsiderPredict(Trader):
 # predicts equilibrium from x last traders instead of all, deals better with market shocks
 class Trader_InsiderPredict2(Trader):
     
-    def __init__(self, ttype, tid, balance, params, time):
+    def __init__(self, ttype, tid, balance, params, time, distance):
 
         self.equilibrium = 0 #equilibrium is the average of all trades that happened
         self.track_num = 15 #number of recent trades to keep track of 
         self.trades_track = []
 
-        super().__init__(ttype, tid, balance, params, time)
+        super().__init__(ttype, tid, balance, params, time, distance)
     
     def getorder(self,time,countdown,lob):
         if len(self.orders) < 1:
@@ -1489,9 +1490,9 @@ class Trader_ZIP(Trader):
             sys.exit('FAIL: bad mode in mutate_strat')
         return new_strat
 
-    def __init__(self, ttype, tid, balance, params, time):
+    def __init__(self, ttype, tid, balance, params, time, distance):
 
-        Trader.__init__(self, ttype, tid, balance, params, time)
+        Trader.__init__(self, ttype, tid, balance, params, time, distance)
 
         # this set of one-liner functions named init_*() are just to make the init params obvious for ease of editing
         # for ZIP, a strategy is specified as a 6-tuple: (margin_buy, margin_sell, beta, momntm, ca, cr)
@@ -2210,12 +2211,16 @@ class Trader_AA(Trader):
 # the number of traders of any one type -- allows either/both to change
 # between successive calls, but that does make it inefficient as it has to
 # re-analyse the entire set of traders on each call
-def trade_stats(expid, traders, dumpfile, time, lob):
+def trade_stats(expid, traders, dumpfile, time, lob, time_delay_test):
 
     # Analyse the set of traders, to see what types we have
-    trader_types = {}
+    trader_types = {} #dictionary of dictionaries, each entry is a trader type with entries: n=number of traders, 
+    # balance_sum = total profit
     for t in traders:
-        ttype = traders[t].ttype
+        if(time_delay_test):
+            ttype = traders[t].distance # differentiate traders by their distance
+        else:
+            ttype = traders[t].ttype
         if ttype in trader_types.keys():
             t_balance = trader_types[ttype]['balance_sum'] + traders[t].balance
             n = trader_types[ttype]['n'] + 1
@@ -2223,6 +2228,7 @@ def trade_stats(expid, traders, dumpfile, time, lob):
             t_balance = traders[t].balance
             n = 1
         trader_types[ttype] = {'n': n, 'balance_sum': t_balance}
+
 
     # first two columns of output are the session_id and the time
     dumpfile.write('%s, %06d, ' % (expid, time))
@@ -2255,33 +2261,33 @@ def populate_market(traders_spec, traders, shuffle, verbose):
     # traders_spec is a list of buyer-specs and a list of seller-specs
     # each spec is (<trader type>, <number of this type of trader>, optionally: <params for this type of trader>)
 
-    def trader_type(robottype, name, parameters):
+    def trader_type(robottype, name, parameters, distance):
         balance = 0.00
         time0 = 0
         if robottype == 'GVWY':
-            return Trader_Giveaway('GVWY', name, balance, parameters, time0)
+            return Trader_Giveaway('GVWY', name, balance, parameters, time0, distance)
         elif robottype == 'INSD':
-            return Trader_Insider('INSD', name, balance, parameters, time0)
+            return Trader_Insider('INSD', name, balance, parameters, time0, distance)
         elif robottype == 'INSDP':
-            return Trader_InsiderPredict2('INSDP', name, balance, parameters, time0)
+            return Trader_InsiderPredict2('INSDP', name, balance, parameters, time0, distance)
         elif robottype == 'ZIC':
-            return Trader_ZIC('ZIC', name, balance, parameters, time0)
+            return Trader_ZIC('ZIC', name, balance, parameters, time0, distance)
         elif robottype == 'SHVR':
-            return Trader_Shaver('SHVR', name, balance, parameters, time0)
+            return Trader_Shaver('SHVR', name, balance, parameters, time0, distance)
         elif robottype == 'SNPR':
-            return Trader_Sniper('SNPR', name, balance, parameters, time0)
+            return Trader_Sniper('SNPR', name, balance, parameters, time0, distance)
         elif robottype == 'ZIP':
-            return Trader_ZIP('ZIP', name, balance, parameters, time0)
+            return Trader_ZIP('ZIP', name, balance, parameters, time0, distance)
         elif robottype == 'ZIPSH':
-            return Trader_ZIP('ZIPSH', name, balance, parameters, time0)
+            return Trader_ZIP('ZIPSH', name, balance, parameters, time0, distance)
         elif robottype == 'PRZI':
-            return Trader_PRZI('PRZI', name, balance, parameters, time0)
+            return Trader_PRZI('PRZI', name, balance, parameters, time0, distance)
         elif robottype == 'PRSH':
-            return Trader_PRZI('PRSH', name, balance, parameters, time0)
+            return Trader_PRZI('PRSH', name, balance, parameters, time0, distance)
         elif robottype == 'PRDE':
-            return Trader_PRZI('PRDE', name, balance, parameters, time0)
+            return Trader_PRZI('PRDE', name, balance, parameters, time0, distance)
         elif robottype == 'AA':
-            return Trader_AA('AA', name, balance, parameters, time0)
+            return Trader_AA('AA', name, balance, parameters, time0, distance)
         else:
             sys.exit('FATAL: don\'t know robot type %s\n' % robottype)
 
@@ -2335,6 +2341,12 @@ def populate_market(traders_spec, traders, shuffle, verbose):
     n_buyers = 0
     for bs in traders_spec['buyers']:
         ttype = bs[0]
+        distance_step = bs[1]/5 # bs[1] is total number of buyers for that type, 
+        # distance_step is the number of iterations
+        current_distance = 1
+        current_step = 0
+        # after which to go to next distance e.g. if there are 10 buyers, then step is 2 -> 2 
+        # traders of same distance
         for b in range(bs[1]):
             tname = 'B%02d' % n_buyers  # buyer i.d. string
             if len(bs) > 2:
@@ -2342,7 +2354,16 @@ def populate_market(traders_spec, traders, shuffle, verbose):
                 params = unpack_params(bs[2], landscape_mapping)
             else:
                 params = unpack_params(None, landscape_mapping)
-            traders[tname] = trader_type(ttype, tname, params)
+
+            # there should be an equal number of traders of 
+            # each distance(to the best ability, any "remainder" is cut off)
+            traders[tname] = trader_type(ttype, tname, params, current_distance)
+            # updating distance parameters
+            current_step += 1
+            if(current_step >= distance_step):
+                current_distance += 1
+                current_step = 0
+            
             n_buyers = n_buyers + 1
 
     if n_buyers < 1:
@@ -2354,6 +2375,12 @@ def populate_market(traders_spec, traders, shuffle, verbose):
     n_sellers = 0
     for ss in traders_spec['sellers']:
         ttype = ss[0]
+        distance_step = ss[1]/5 # bs[1] is total number of buyers for that type, 
+        # distance_step is the number of iterations
+        current_distance = 1
+        current_step = 0
+        # after which to go to next distance e.g. if there are 10 buyers, then step is 2 -> 2 
+        # traders of same distance
         for s in range(ss[1]):
             tname = 'S%02d' % n_sellers  # buyer i.d. string
             if len(ss) > 2:
@@ -2361,7 +2388,15 @@ def populate_market(traders_spec, traders, shuffle, verbose):
                 params = unpack_params(ss[2], landscape_mapping)
             else:
                 params = unpack_params(None, landscape_mapping)
-            traders[tname] = trader_type(ttype, tname, params)
+            # there should be an equal number of traders of 
+            # each distance(to the best ability, any "remainder" is cut off)
+            traders[tname] = trader_type(ttype, tname, params, current_distance)
+            # updating distance parameters
+            current_step += 1
+            if(current_step >= distance_step):
+                current_distance += 1
+                current_step = 0
+
             n_sellers = n_sellers + 1
 
     if n_sellers < 1:
@@ -2662,6 +2697,7 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
     # random or not i.e. the bounds of the range are random too
     time_delays = noise_uncert_flags["time_delay"] 
     # simulated time delays where some traders are closer to the exchange so are more likely to be selected
+    time_delay_test = noise_uncert_flags["time_delay_test"]
  
     if dump_flags['dump_strats']:
         strat_dump = open(sess_id + '_strats.csv', 'w')
@@ -2782,7 +2818,8 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
                 traders[trade['party1']].bookkeep(trade, order, bookkeep_verbose, time)
                 traders[trade['party2']].bookkeep(trade, order, bookkeep_verbose, time)
                 if dump_flags['dump_avgbals']:
-                    trade_stats(sess_id, traders, avg_bals, time, exchange.publish_lob(time, lobframes, lob_verbose))
+                    trade_stats(sess_id, traders, avg_bals, time, exchange.publish_lob(time, lobframes, lob_verbose)
+                                , time_delay_test)
 
             # traders respond to whatever happened
             lob = exchange.publish_lob(time, lobframes, lob_verbose)
@@ -2808,7 +2845,8 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
 
     # write trade_stats for this session (NB could use this to write end-of-session summary only)
     if dump_flags['dump_avgbals']:
-        trade_stats(sess_id, traders, avg_bals, time, exchange.publish_lob(time, lobframes, lob_verbose))
+        trade_stats(sess_id, traders, avg_bals, time, exchange.publish_lob(time, lobframes, lob_verbose),
+                    time_delay_test)
         avg_bals.close()
 
     if dump_flags['dump_tape']:
@@ -2832,7 +2870,7 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
 def run_one_set_experiments(noise_uncert_flags):
     # set up common parameters for all market sessions
     # 1000 days is good, but 3*365=1095, so may as well go for three years.
-    n_days = 0.000694 # 0.00694 = 600 seconds
+    n_days = 0.00694 # 0.00694 = 600 seconds
     start_time = 0.0
     end_time = 60.0 * 60.0 * 24 * n_days
     duration = end_time - start_time
@@ -2867,6 +2905,9 @@ def run_one_set_experiments(noise_uncert_flags):
 
     # introduces a shock to customer orders that changes the equilibrium price
     market_shock = noise_uncert_flags["market_shock"] 
+
+    # time delay test showing the effect of distance on profit by distance type rather than strategy type
+    time_delay_test = noise_uncert_flags["time_delay_test"]
 
     if market_shock:
         #introducing a shock in the schedules
@@ -2939,13 +2980,17 @@ def run_one_set_experiments(noise_uncert_flags):
         trial = trial + 1
     
     # return the average data frame for this session
-    return processResults.average_data_6(n_trials,n_days,order_interval)
+    if(time_delay_test):
+        return processResults.average_data_distance(n_trials,n_days,order_interval)
+    else:
+        return processResults.average_data_6(n_trials,n_days,order_interval)
 
 
 if __name__ == "__main__":
 
     noise_test = False # testing how noise affects each trader 
-    market_shock_test = True
+    market_shock_test = False
+    time_delay_test = True
     normal_test = False # no noise or uncertainty(beyond fixed stepmode and )
 
     df_list = []
@@ -2958,7 +3003,8 @@ if __name__ == "__main__":
         for i in range(0,5):
             # Store all dataframes of experiments with different parameters set. 
             # Default one is for no noise and uncertainty
-            noise_uncertain_flags = {"noise":0, "noise_rand_range":False, "time_delay":False, "market_shock":False}
+            noise_uncertain_flags = {"noise":0, "noise_rand_range":False, "time_delay":False, "market_shock":False, 
+                                    "time_delay_test":False}
             noise_names = ["no_noise","5_FR","5_RR","15_FR","15_RR"]
             # 5 experiments, one without any noise, another 2 with level 5 noise and random range or not, and 2 with 15
             if i==1:
@@ -2985,18 +3031,38 @@ if __name__ == "__main__":
     elif(market_shock_test):
         # run an experiment with market_shock on
 
-        noise_uncertain_flags = {"noise":0, "noise_rand_range":False, "time_delay":False, "market_shock":True}
+        noise_uncertain_flags = {"noise":0, "noise_rand_range":False, "time_delay":False, "market_shock":True
+                                 ,"time_delay_test":False}
         date_frame = run_one_set_experiments(noise_uncertain_flags)
 
         processResults.average_graph6(date_frame,market_shock=True)
-        processResults.average_equilibrium6(date_frame,market_shock=True)
+        processResults.average_equilibrium(date_frame,market_shock=True)
+
+    elif(time_delay_test):
+        # average profit graph by distance to exchange
+        noise_uncertain_flags = {"noise":0, "noise_rand_range":False, "time_delay":True, "market_shock":False
+                                 ,"time_delay_test":True} # time_delay_test will map the trader performance by distance
+                                                           # to exchange rather than strategy type
+        data_frame = run_one_set_experiments(noise_uncertain_flags)
+        
+        processResults.average_graph6(data_frame,time_delay_test=True)
+        processResults.average_equilibrium(data_frame,time_delay_test=True)
+        
+        # average profit graph by trader type now
+
+        noise_uncertain_flags = {"noise":0, "noise_rand_range":False, "time_delay":True, "market_shock":False
+                                 ,"time_delay_test":False}
+        data_frame = run_one_set_experiments(noise_uncertain_flags)
+        
+        processResults.average_graph6(data_frame)
 
     elif(normal_test):
-        noise_uncertain_flags = {"noise":0, "noise_rand_range":False, "time_delay":False, "market_shock":False}
+        noise_uncertain_flags = {"noise":0, "noise_rand_range":False, "time_delay":False, "market_shock":False
+                                 , "time_delay_test":False}
         date_frame = run_one_set_experiments(noise_uncertain_flags)
 
         processResults.average_graph6(date_frame)
-        processResults.average_equilibrium6(date_frame)
+        processResults.average_equilibrium(date_frame)
     
     # run a sequence of trials that exhaustively varies the ratio of four trader types
     # NB this has weakness of symmetric proportions on buyers/sellers -- combinatorics of varying that are quite nasty
