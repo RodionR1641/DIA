@@ -53,6 +53,7 @@ import math
 import random
 import os
 import time as chrono
+import processResults
 from typing import Self
 
 # a bunch of system constants (globals)
@@ -2576,7 +2577,7 @@ def customer_orders(time, last_update, traders, trader_stats, os, pending, verbo
 
 
 # one session in the market
-def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dump_flags, verbose):
+def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dump_flags, verbose, noise_uncert_flags):
 
     def dump_strats_frame(time, stratfile, trdrs):
         # write one frame of strategy snapshot
@@ -2656,11 +2657,11 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
     respond_verbose = False
     bookkeep_verbose = False
     populate_verbose = False
-    noise = 0 # indicates the range of noise
-    random_range_noise = False # indicates if the range of the noise added is random or not i.e. the bounds of the 
-    #range are random too
-    time_delays = False # simulated time delays where some traders are closer to the exchange so are more likely to be 
-    #selected
+    noise = noise_uncert_flags["noise"] # indicates the range of noise
+    random_range_noise = noise_uncert_flags["noise_rand_range"] # indicates if the range of the noise added is
+    # random or not i.e. the bounds of the range are random too
+    time_delays = noise_uncert_flags["time_delay"] 
+    # simulated time delays where some traders are closer to the exchange so are more likely to be selected
  
     if dump_flags['dump_strats']:
         strat_dump = open(sess_id + '_strats.csv', 'w')
@@ -2828,16 +2829,13 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
 
 # # Below here is where we set up and run a whole series of experiments
 
-
-if __name__ == "__main__":
-
+def run_one_set_experiments(noise_uncert_flags):
     # set up common parameters for all market sessions
     # 1000 days is good, but 3*365=1095, so may as well go for three years.
-    n_days = 0.00694 # 600 seconds
+    n_days = 0.000694 # 0.00694 = 600 seconds
     start_time = 0.0
     end_time = 60.0 * 60.0 * 24 * n_days
     duration = end_time - start_time
-    market_shock = False # introduces a shock to customer orders that changes the equilibrium price
 
     # schedule_offsetfn returns time-dependent offset, to be added to schedule prices
     def schedule_offsetfn(t):
@@ -2866,6 +2864,9 @@ if __name__ == "__main__":
     available_stepmodes = ['fixed','random','jittered'] 
     # timemodes indicate the time distribution of new customer orders
     available_timemodes = ['periodic','drip-fixed','drip-jitter','drip-poisson']
+
+    # introduces a shock to customer orders that changes the equilibrium price
+    market_shock = noise_uncert_flags["market_shock"] 
 
     if market_shock:
         #introducing a shock in the schedules
@@ -2933,10 +2934,70 @@ if __name__ == "__main__":
             dump_flags = {'dump_blotters': True, 'dump_lobs': False, 'dump_strats': True,
                           'dump_avgbals': True, 'dump_tape': True}
 
-        market_session(trial_id, start_time, end_time, traders_spec, order_sched, dump_flags, verbose)
+        market_session(trial_id, start_time, end_time, traders_spec, order_sched, dump_flags, verbose, noise_uncert_flags)
 
         trial = trial + 1
+    
+    # return the average data frame for this session
+    return processResults.average_data_6(n_trials,n_days,order_interval)
 
+
+if __name__ == "__main__":
+
+    noise_test = False # testing how noise affects each trader 
+    market_shock_test = True
+    normal_test = False # no noise or uncertainty(beyond fixed stepmode and )
+
+    df_list = []
+    
+
+    # note: add flags to set the stepmode and time mode, and the offset if needed
+
+    if(noise_test):
+
+        for i in range(0,5):
+            # Store all dataframes of experiments with different parameters set. 
+            # Default one is for no noise and uncertainty
+            noise_uncertain_flags = {"noise":0, "noise_rand_range":False, "time_delay":False, "market_shock":False}
+            noise_names = ["no_noise","5_FR","5_RR","15_FR","15_RR"]
+            # 5 experiments, one without any noise, another 2 with level 5 noise and random range or not, and 2 with 15
+            if i==1:
+                noise_uncertain_flags["noise"] = 5
+            elif i==2:
+                noise_uncertain_flags["noise"] = 5
+                noise_uncertain_flags["noise_rand_range"] = True
+            elif i==3:
+                noise_uncertain_flags["noise"] = 15
+            elif i==4:
+                noise_uncertain_flags["noise"] = 15
+                noise_uncertain_flags["noise_rand_range"] = True
+
+            data_frame = run_one_set_experiments(noise_uncertain_flags) # get a resulting data frame from one set of experiments
+            df_list.append(data_frame)
+            print("trial {} finished".format(i+1))
+
+            # display the graph of performance of all traders combined per different level of noise
+            processResults.average_graph6(data_frame,noise=noise_names[i])
+
+        # display the 
+        processResults.display_noise_expr(df_list)
+        processResults.display_noise_eq(df_list)
+    elif(market_shock_test):
+        # run an experiment with market_shock on
+
+        noise_uncertain_flags = {"noise":0, "noise_rand_range":False, "time_delay":False, "market_shock":True}
+        date_frame = run_one_set_experiments(noise_uncertain_flags)
+
+        processResults.average_graph6(date_frame,market_shock=True)
+        processResults.average_equilibrium6(date_frame,market_shock=True)
+
+    elif(normal_test):
+        noise_uncertain_flags = {"noise":0, "noise_rand_range":False, "time_delay":False, "market_shock":False}
+        date_frame = run_one_set_experiments(noise_uncertain_flags)
+
+        processResults.average_graph6(date_frame)
+        processResults.average_equilibrium6(date_frame)
+    
     # run a sequence of trials that exhaustively varies the ratio of four trader types
     # NB this has weakness of symmetric proportions on buyers/sellers -- combinatorics of varying that are quite nasty
     #

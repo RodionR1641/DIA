@@ -13,4 +13,5 @@ def delete_csv():
             file_path = os.path.join(csv_directory, filename)
             os.remove(file_path)
 
-print(getDaysFromSec(600))
+delete_csv()
+#print(getDaysFromSec(600))
