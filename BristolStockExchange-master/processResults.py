@@ -202,8 +202,8 @@ def average_graph6(data_frame, time_delay_test=False, **kwargs):
         plt.title("500 runs of 6 trader types, 5 sellers and 5 buyers each with time delays. Showing effects on "+
                     "performance by distance to exchange")
     else:
-        plt.title("500 runs of 6 trader types, 5 sellers and 5 buyers each")    
         data_frame.plot(x="TIME",y=["GVWY","INSDP","SHVR","SNPR","ZIC","ZIP"], kind="line") 
+        plt.title("500 runs of 6 trader types, 5 sellers and 5 buyers each")    
 
     plt.xlabel("Time")
     plt.ylabel("Average Profit")

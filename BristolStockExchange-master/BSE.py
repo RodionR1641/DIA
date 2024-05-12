@@ -48,6 +48,7 @@
 #
 # NB this code has been written to be readable/intelligible, not efficient!
 
+from pdb import run
 import sys
 import math
 import random
@@ -2895,8 +2896,8 @@ def run_one_set_experiments(noise_uncert_flags):
     # -- here the timings of the shocks are at 1/3 and 2/3 into the duration of the session.
     #
     
-    range1 = (50, 150) # can include schedule_offsetfn for more uncertainty
-    range2 = (200,300)
+    range1 = (50, 150,schedule_offsetfn) # can include schedule_offsetfn for more uncertainty
+    range2 = (200, 300,schedule_offsetfn)
     
     # stepmodes tell how prices should be generated 
     available_stepmodes = ['fixed','random','jittered'] 
@@ -2911,12 +2912,12 @@ def run_one_set_experiments(noise_uncert_flags):
 
     if market_shock:
         #introducing a shock in the schedules
-        supply_schedule = [ {'from':start_time, 'to':duration/3, 'ranges':[range1], 'stepmode':available_stepmodes[0]},
-                            {'from':duration/3, 'to':2*duration/3, 'ranges':[range2], 'stepmode':available_stepmodes[0]},
-                            {'from':2*duration/3, 'to':end_time, 'ranges':[range1], 'stepmode':available_stepmodes[0]}
+        supply_schedule = [ {'from':start_time, 'to':duration/3, 'ranges':[range1], 'stepmode':available_stepmodes[2]},
+                            {'from':duration/3, 'to':2*duration/3, 'ranges':[range2], 'stepmode':available_stepmodes[2]},
+                            {'from':2*duration/3, 'to':end_time, 'ranges':[range1], 'stepmode':available_stepmodes[2]}
                         ]
     else:
-        supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': available_stepmodes[0]}]
+        supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': available_stepmodes[2]}]
     demand_schedule = supply_schedule
 
     #range2 = (50, 150)
@@ -2926,7 +2927,7 @@ def run_one_set_experiments(noise_uncert_flags):
     order_interval = 15
 
     order_sched = {'sup': supply_schedule, 'dem': demand_schedule,
-                   'interval': order_interval, 'timemode': available_timemodes[0]}
+                   'interval': order_interval, 'timemode': available_timemodes[2]}
 
     # Use 'periodic' if you want the traders' assignments to all arrive simultaneously & periodically
     #               'order_interval': 30, 'timemode': 'periodic'}
@@ -2992,6 +2993,7 @@ if __name__ == "__main__":
     market_shock_test = False
     time_delay_test = True
     normal_test = False # no noise or uncertainty(beyond fixed stepmode and )
+    combined_test = False
 
     df_list = []
     
@@ -3040,6 +3042,7 @@ if __name__ == "__main__":
 
     elif(time_delay_test):
         # average profit graph by distance to exchange
+        
         noise_uncertain_flags = {"noise":0, "noise_rand_range":False, "time_delay":True, "market_shock":False
                                  ,"time_delay_test":True} # time_delay_test will map the trader performance by distance
                                                            # to exchange rather than strategy type
@@ -3055,6 +3058,14 @@ if __name__ == "__main__":
         data_frame = run_one_set_experiments(noise_uncertain_flags)
         
         processResults.average_graph6(data_frame)
+
+    elif(combined_test):
+        noise_uncertain_flags = {"noise":15, "noise_rand_range":False, "time_delay":True, "market_shock":True,
+                                 "time_delay_test":False}
+        data_frame = run_one_set_experiments(noise_uncertain_flags)
+
+        processResults.average_graph6(data_frame)
+        processResults.average_equilibrium(data_frame)
 
     elif(normal_test):
         noise_uncertain_flags = {"noise":0, "noise_rand_range":False, "time_delay":False, "market_shock":False
