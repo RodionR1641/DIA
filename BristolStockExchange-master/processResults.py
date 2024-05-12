@@ -2,8 +2,7 @@ import pandas as pd
 import string
 import matplotlib.pyplot as plt
 
-print(list(string.ascii_uppercase)[0:24])
-
+#====================================
 
 #get the average dataframe of average profit over time for each trader type
 def average_data_6(numtrials,n_days,order_interval):
@@ -271,8 +270,4 @@ def display_noise_eq(df_list):
         plt.title("Average bid and ask over time for {} noise".format(noise[i]))
         plt.show(block=True)
 
-#bidAsk_time(1,0.01,15)
-
-#average_data_6(1,0.01,15)
-#average_graph6()
-#average_equilibrium6()
+#====================================

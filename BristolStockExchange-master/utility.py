@@ -1,6 +1,6 @@
 import os
 
-
+#=================================
 # needed for BSE n_days
 def getDaysFromSec(seconds):
     return seconds/60/60/24
@@ -13,5 +13,5 @@ def delete_csv():
             file_path = os.path.join(csv_directory, filename)
             os.remove(file_path)
 
-delete_csv()
-#print(getDaysFromSec(600))
+
+#================================
