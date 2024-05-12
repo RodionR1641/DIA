@@ -436,8 +436,10 @@ class Trader:
         self.profit_mintime = 60    # minimum duration in seconds for calculating profitpertime
         self.n_trades = 0           # how many trades has this trader done?
         self.lastquote = None       # record of what its last quote was
+        #=====================================================
         self.distance = distance # random distance to the exchange, 
         #5 being the closest and 1 the furthest away 
+        #=====================================================
 
     def __str__(self):
         return '[TID %s type %s balance %s blotter %s orders %s n_trades %s profitpertime %s]' \
@@ -541,6 +543,7 @@ class Trader_Giveaway(Trader):
             self.lastquote = order
         return order
 
+#=====================================================
 #estimates the equilibrium price of the exchange
 class Trader_Insider(Trader):
     
@@ -661,7 +664,7 @@ class Trader_InsiderPredict2(Trader):
 
         #return super().respond(time, lob, trade, verbose)
         self.profitpertime = self.profitpertime_update(time, self.birthtime, self.balance)
-
+#=====================================================
 # Trader subclass ZI-C
 # After Gode & Sunder 1993
 class Trader_ZIC(Trader):
@@ -1926,280 +1929,6 @@ class Trader_ZIP(Trader):
         # return value of respond() tells caller whether to print a new frame of system-snapshot data
         return snapshot
 
-
-class Trader_AA(Trader):
-
-    def __init__(self,ttype, tid, balance, params, time):
-
-        # External parameters (you must choose [optimise] values yourselves)
-        self.spin_up_time = 20
-        self.eta = 3.0
-        self.theta_max = 2.0
-        self.theta_min = -8.0
-        self.lambda_a = 0.01
-        self.lambda_r = 0.02
-        self.beta_1 = 0.4
-        self.beta_2 = 0.4
-        self.gamma = 2.0
-        self.nLastTrades = 5  # N in AIJ08
-        self.ema_param = 2 / float(self.nLastTrades + 1)
-        self.maxNewtonItter = 10
-        self.maxNewtonError = 0.0001
-        
-        # The order we're trying to trade
-        self.orders = []
-        self.limit = None
-        self.active = False
-        self.job = None
-        
-        # Parameters describing what the market looks like and it's contstraints
-        self.marketMax = bse_sys_maxprice
-        self.prev_best_bid_p = None
-        self.prev_best_bid_q = None
-        self.prev_best_ask_p = None
-        self.prev_best_ask_q = None
-        
-        # Internal parameters (spin up time need to get values for some of these)
-        self.eqlbm = None
-        self.theta = -1.0 * (5.0 * random.random())
-        self.smithsAlpha = None
-        self.lastTrades = []
-        self.smithsAlphaMin = None
-        self.smithsAlphaMax = None
-        
-        self.aggressiveness_buy = -1.0 * (0.3 * random.random())
-        self.aggressiveness_sell = -1.0 * (0.3 * random.random())
-        self.target_buy = None
-        self.target_sell = None
-
-        super().__init__(ttype, tid, balance, params, time)
-
-    def updateEq(self, price):
-        # Updates the equilibrium price estimate using EMA
-        if self.eqlbm == None: self.eqlbm = price
-        else: self.eqlbm = self.ema_param * price + (1 - self.ema_param) * self.eqlbm
-        
-    def newton4Buying(self):
-        # runs Newton-Raphson to find theta_est (the value of theta that makes the 1st 
-        # derivative of eqn(3) continuous)
-        theta_est = self.theta
-        rightHside = ((self.theta * (self.limit - self.eqlbm)) / float(math.exp(self.theta) - 1));
-        i = 0
-        while i <= self.maxNewtonItter:
-            eX = math.exp(theta_est)
-            eXminOne = eX - 1
-            fofX = (((theta_est * self.eqlbm) / float(eXminOne)) - rightHside)
-            if abs(fofX) <= self.maxNewtonError:
-                break
-            dfofX = ((self.eqlbm / eXminOne) - ((eX * self.eqlbm * theta_est) / float(eXminOne * eXminOne)))
-            theta_est = (theta_est - (fofX / float(dfofX)));
-            i += 1
-        if theta_est == 0.0: theta_est += 0.000001
-        return theta_est
-    
-    def newton4Selling(self):
-        # runs Newton-Raphson to find theta_est (the value of theta that makes the 1st 
-        # derivative of eqn(4) continuous)
-        theta_est = self.theta
-        rightHside = ((self.theta * (self.eqlbm - self.limit)) / float(math.exp(self.theta) - 1))
-        i = 0
-        while i <= self.maxNewtonItter:
-            eX = math.exp(theta_est)
-            eXminOne = eX - 1
-            fofX = (((theta_est * (self.marketMax - self.eqlbm)) / float(eXminOne)) - rightHside)
-            if abs(fofX) <= self.maxNewtonError:
-                break
-            dfofX = (((self.marketMax - self.eqlbm) / eXminOne) - ((eX * (self.marketMax - self.eqlbm) * theta_est) / float(eXminOne * eXminOne)))
-            theta_est = (theta_est - (fofX / float(dfofX)))
-            i += 1
-        if theta_est == 0.0: theta_est += 0.000001
-        return theta_est
-        
-    def updateTarget(self):
-        # relates to eqns (3),(4),(5) and (6)
-        # For buying
-        if self.limit < self.eqlbm:
-            # Extra-marginal buyer
-            if self.aggressiveness_buy >= 0: target = self.limit
-            else: target = self.limit * (1 - (math.exp(-self.aggressiveness_buy * self.theta) - 1) / float(math.exp(self.theta) - 1))
-            self.target_buy = target
-        else:
-            # Intra-marginal buyer
-            if self.aggressiveness_buy >= 0: target = (self.eqlbm + (self.limit - self.eqlbm) * ((math.exp(self.aggressiveness_buy * self.theta) - 1) / float(math.exp(self.theta) - 1)))
-            else:
-                theta_est = self.newton4Buying()
-                target = self.eqlbm * (1 - (math.exp(-self.aggressiveness_buy * theta_est) - 1) / float(math.exp(theta_est) - 1))
-            self.target_buy = target
-        # For selling
-        if self.limit > self.eqlbm:
-            # Extra-marginal seller
-            if self.aggressiveness_sell >= 0: target = self.limit
-            else: target = self.limit + (self.marketMax - self.limit) * ((math.exp(-self.aggressiveness_sell * self.theta) - 1) / float(math.exp(self.theta) - 1))
-            self.target_sell = target
-        else:
-            # Intra-marginal seller
-            if self.aggressiveness_sell >= 0: target = self.limit + (self.eqlbm - self.limit) * (1 - (math.exp(self.aggressiveness_sell * self.theta) - 1) / float(math.exp(self.theta) - 1))
-            else:
-                theta_est = self.newton4Selling() 
-                target = self.eqlbm + (self.marketMax - self.eqlbm) * ((math.exp(-self.aggressiveness_sell * theta_est) - 1) / (math.exp(theta_est) - 1))
-            self.target_sell = target
-    
-    def calcRshout(self, target, buying):
-        if buying:
-            # Are we extramarginal?
-            if self.eqlbm >= self.limit:
-                r_shout = 0.0
-            else:  # Intra-marginal
-                if target > self.eqlbm:
-                    if target > self.limit: target = self.limit
-                    r_shout = math.log((((target - self.eqlbm) * (math.exp(self.theta) - 1)) / (self.limit - self.eqlbm)) + 1) / self.theta
-                else:  # other formula for intra buyer
-                    r_shout = math.log((1 - (target / self.eqlbm)) * (math.exp(self.newton4Buying()) - 1) + 1) / -self.newton4Buying()
-        else:  # Selling
-            # Are we extra-marginal?
-            if self.limit >= self.eqlbm:
-                r_shout = 0.0
-            else:  # Intra-marginal
-                if target > self.eqlbm:
-                    r_shout = math.log(((target - self.eqlbm) * (math.exp(self.newton4Selling()) - 1)) / (self.marketMax - self.eqlbm) + 1) / -self.newton4Selling()
-                else:  # other intra seller formula
-                    if target < self.limit: target = self.limit
-                    r_shout = math.log((1 - (target - self.limit) / (self.eqlbm - self.limit)) * (math.exp(self.theta) - 1) + 1) / self.theta
-        return r_shout
-    
-    def updateAgg(self, up, buying, target):
-        if buying:
-            old_agg = self.aggressiveness_buy 
-        else:
-            old_agg = self.aggressiveness_sell
-        if up:
-            delta = (1 + self.lambda_r) * self.calcRshout(target, buying) + self.lambda_a
-        else:
-            delta = (1 - self.lambda_r) * self.calcRshout(target, buying) - self.lambda_a
-        new_agg = old_agg + self.beta_1 * (delta - old_agg)
-        if new_agg > 1.0: new_agg = 1.0
-        elif new_agg < 0.0: new_agg = 0.000001
-        return new_agg
-    
-    def updateSmithsAlpha(self, price):
-        self.lastTrades.append(price)
-        if not (len(self.lastTrades) <= self.nLastTrades): self.lastTrades.pop(0)
-        self.smithsAlpha = math.sqrt(sum(((p - self.eqlbm) ** 2) for p in self.lastTrades) * (1 / float(len(self.lastTrades)))) / self.eqlbm
-        if self.smithsAlphaMin == None:
-            self.smithsAlphaMin = self.smithsAlpha
-            self.smithsAlphaMax = self.smithsAlphaMax
-        else:
-            if self.smithsAlpha < self.smithsAlphaMin: self.smithsAlphaMin = self.smithsAlpha
-            if self.smithsAlpha > self.smithsAlphaMax: self.smithsAlphaMax = self.smithsAlpha
-        
-    def updateTheta(self):
-        alphaBar = (self.smithsAlpha - self.smithsAlphaMin) / (self.smithsAlphaMax - self.smithsAlphaMin)
-        desiredTheta = (self.theta_max - self.theta_min) * (1 - (alphaBar * math.exp(self.gamma * (alphaBar - 1)))) + self.theta_min
-        theta = self.theta + self.beta_2 * (desiredTheta - self.theta)
-        if theta == 0: theta += 0.0000001
-        self.theta = theta
-    
-    def getorder(self, time, countdown, lob):
-        if len(self.orders) < 1:
-            self.active = False
-            order = None
-        else:
-            self.active = True
-            self.limit = self.orders[0].price
-            self.job = self.orders[0].otype
-            self.updateTarget()
-            if self.job == 'Bid':
-                # currently a buyer (working a bid order)
-                if self.spin_up_time > 0:
-                    ask_plus = (1 + self.lambda_r) * self.prev_best_ask_p + self.lambda_a
-                    quoteprice = self.prev_best_bid_p + (min(self.limit, ask_plus) - self.prev_best_bid_p) / self.eta
-                else:
-                    quoteprice = self.prev_best_bid_p + (self.target - self.prev_best_bid_p) / self.eta
-            else:
-                # currently a seller (working a sell order)
-                if self.spin_up_time > 0:
-                    bid_minus = (1 - self.lambda_r) * self.prev_best_bid_p - self.lambda_a
-                    quoteprice = self.prev_best_ask_p - (self.prev_best_ask_p - max(self.limit, bid_minus)) / self.eta
-                else:
-                    quoteprice = (self.prev_best_ask_p - (self.prev_best_ask_p - self.target) / self.eta)
-        
-            order = Order(self.tid, self.job, quoteprice, self.orders[0].qty, time)
-        
-        return order             
-            
-        
-    def respond(self, time, lob, trade, verbose):
-        # what, if anything, has happened on the bid LOB?
-        bid_improved = False
-        bid_hit = False
-        lob_best_bid_p = lob['bids']['best']
-        lob_best_bid_q = None
-        if lob_best_bid_p != None:
-            # non-empty bid LOB
-            lob_best_bid_q = lob['bids']['lob'][-1][1]
-            if self.prev_best_bid_p < lob_best_bid_p :
-                # best bid has improved
-                # NB doesn't check if the improvement was by self
-                bid_improved = True
-            elif trade != None and ((self.prev_best_bid_p > lob_best_bid_p) or ((self.prev_best_bid_p == lob_best_bid_p) and (self.prev_best_bid_q > lob_best_bid_q))):
-                # previous best bid was hit
-                bid_hit = True
-        elif self.prev_best_bid_p != None:
-            # the bid LOB has been emptied by a hit
-                bid_hit = True
-
-        # what, if anything, has happened on the ask LOB?
-        ask_improved = False
-        ask_lifted = False
-        lob_best_ask_p = lob['asks']['best']
-        lob_best_ask_q = None
-        if lob_best_ask_p != None:
-            # non-empty ask LOB
-            lob_best_ask_q = lob['asks']['lob'][0][1]
-            if self.prev_best_ask_p > lob_best_ask_p :
-                # best ask has improved -- NB doesn't check if the improvement was by self
-                ask_improved = True
-            elif trade != None and ((self.prev_best_ask_p < lob_best_ask_p) or ((self.prev_best_ask_p == lob_best_ask_p) and (self.prev_best_ask_q > lob_best_ask_q))):
-                # trade happened and best ask price has got worse, or stayed same but quantity reduced -- assume previous best ask was lifted
-                ask_lifted = True
-        elif self.prev_best_ask_p != None:
-            # the bid LOB is empty now but was not previously, so must have been hit
-            ask_lifted = True
-
-        if verbose and (bid_improved or bid_hit or ask_improved or ask_lifted):
-            print ('B_improved', bid_improved, 'B_hit', bid_hit, 'A_improved', ask_improved, 'A_lifted', ask_lifted)
-
-        deal = bid_hit or ask_lifted
-        self.prev_best_bid_p = lob_best_bid_p
-        self.prev_best_ask_p = lob_best_ask_p
-        
-        
-        if self.spin_up_time > 0: self.spin_up_time -= 1
-        if deal:
-            price = trade['price']
-            self.updateEq(price)
-            self.updateSmithsAlpha(price)
-            self.updateTheta()
-        
-        # The lines below represent the rules in fig(7) in AIJ08. The if statements have not
-        # been merged for the sake of clarity.
-        
-        # For buying
-        if deal:
-            if self.target >= price: 
-                self.aggressiveness_buy = self.updateAgg(False, True, price)
-            else: self.aggressiveness_buy = self.updateAgg(True, True, price)
-        elif bid_improved and (self.target <= price): self.aggressiveness_buy = self.updateAgg(True, True, self.prev_best_bid_p)
-        # For selling
-        if deal:
-            if self.target <= price:  self.aggressiveness_sell = self.updateAgg(False, False, price)
-            else: self.aggressiveness_sell = self.updateAgg(True, False, price)
-        elif ask_improved and (self.target >= price): self.aggressiveness_sell = self.updateAgg(True, False, self.prev_best_ask_p)
-        
-        self.updateTarget()
-        
-
-
 # ########################---trader-types have all been defined now--################
 
 
@@ -2214,6 +1943,7 @@ class Trader_AA(Trader):
 # re-analyse the entire set of traders on each call
 def trade_stats(expid, traders, dumpfile, time, lob, time_delay_test):
 
+    #=====================================================
     # Analyse the set of traders, to see what types we have
     trader_types = {} #dictionary of dictionaries, each entry is a trader type with entries: n=number of traders, 
     # balance_sum = total profit
@@ -2229,7 +1959,7 @@ def trade_stats(expid, traders, dumpfile, time, lob, time_delay_test):
             t_balance = traders[t].balance
             n = 1
         trader_types[ttype] = {'n': n, 'balance_sum': t_balance}
-
+    #=====================================================
 
     # first two columns of output are the session_id and the time
     dumpfile.write('%s, %06d, ' % (expid, time))
@@ -2262,6 +1992,7 @@ def populate_market(traders_spec, traders, shuffle, verbose):
     # traders_spec is a list of buyer-specs and a list of seller-specs
     # each spec is (<trader type>, <number of this type of trader>, optionally: <params for this type of trader>)
 
+    #=====================================================
     def trader_type(robottype, name, parameters, distance):
         balance = 0.00
         time0 = 0
@@ -2287,10 +2018,9 @@ def populate_market(traders_spec, traders, shuffle, verbose):
             return Trader_PRZI('PRSH', name, balance, parameters, time0, distance)
         elif robottype == 'PRDE':
             return Trader_PRZI('PRDE', name, balance, parameters, time0, distance)
-        elif robottype == 'AA':
-            return Trader_AA('AA', name, balance, parameters, time0, distance)
         else:
             sys.exit('FATAL: don\'t know robot type %s\n' % robottype)
+    #=====================================================
 
     def shuffle_traders(ttype_char, n, traders):
         for swap in range(n):
@@ -2693,12 +2423,14 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
     respond_verbose = False
     bookkeep_verbose = False
     populate_verbose = False
+    #=====================================================
     noise = noise_uncert_flags["noise"] # indicates the range of noise
     random_range_noise = noise_uncert_flags["noise_rand_range"] # indicates if the range of the noise added is
     # random or not i.e. the bounds of the range are random too
     time_delays = noise_uncert_flags["time_delay"] 
     # simulated time delays where some traders are closer to the exchange so are more likely to be selected
     time_delay_test = noise_uncert_flags["time_delay_test"]
+    #=====================================================
  
     if dump_flags['dump_strats']:
         strat_dump = open(sess_id + '_strats.csv', 'w')
@@ -2721,12 +2453,13 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
     # create a bunch of traders
     traders = {}
     trader_stats = populate_market(trader_spec, traders, True, populate_verbose)
-
+    
+    #=====================================================
     # sum of all "distances" to the exchange, used to generate a random number and choose a random trader
     sum_probabilities = 0
     for trader,value in traders.items():
         sum_probabilities += value.distance
-
+    #=====================================================
     # timestep set so that can process all traders in one second
     # NB minimum interarrival time of customer orders may be much less than this!!
     timestep = 1.0 / float(trader_stats['n_buyers'] + trader_stats['n_sellers'])
@@ -2766,8 +2499,8 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
                     # if verbose : print('Killing order %s' % (str(traders[kill].lastquote)))
                     exchange.del_order(time, traders[kill].lastquote, verbose)
 
+        #=====================================
         # get a limit-order quote (or None) from a randomly chosen trader
-        
         
         if(time_delays):
             # time delays simulation added to traders - some traders are closer to the exchange and so have higher
@@ -2784,10 +2517,11 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
             tid = list(traders.keys())[random.randint(0, len(traders) - 1)]
         
         order = traders[tid].getorder(time, time_left, exchange.publish_lob(time, lobframes, lob_verbose))
-
+        #======================================
         # if verbose: print('Trader Quote: %s' % (order))
 
         if order is not None:
+            #=================================
             if noise>0:
                 if random_range_noise:
                     # random number in a range defined by 2 random numbers between -noise and noise
@@ -2810,6 +2544,7 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
                 order.price = traders[tid].orders[0].price # just set it equal to the customer limit price
                 if noise == 0:
                     sys.exit('Bad bid')
+            #=========================
             # send order to exchange
             traders[tid].n_quotes = 1
             trade = exchange.process_order2(time, order, process_verbose)
@@ -2865,6 +2600,8 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
         lobframes.close()
 
 #############################
+
+#=================================================
 
 # # Below here is where we set up and run a whole series of experiments
 
@@ -2986,12 +2723,13 @@ def run_one_set_experiments(noise_uncert_flags):
     else:
         return processResults.average_data_6(n_trials,n_days,order_interval)
 
+#=================================================
 
 if __name__ == "__main__":
 
-    noise_test = False # testing how noise affects each trader 
+    noise_test = True # testing how noise affects each trader 
     market_shock_test = False
-    time_delay_test = True
+    time_delay_test = False
     normal_test = False # no noise or uncertainty(beyond fixed stepmode and )
     combined_test = False
 
@@ -3074,47 +2812,4 @@ if __name__ == "__main__":
 
         processResults.average_graph6(date_frame)
         processResults.average_equilibrium(date_frame)
-    
-    # run a sequence of trials that exhaustively varies the ratio of four trader types
-    # NB this has weakness of symmetric proportions on buyers/sellers -- combinatorics of varying that are quite nasty
-    #
-    # n_trader_types = 4
-    # equal_ratio_n = 4
-    # n_trials_per_ratio = 50
-    #
-    # n_traders = n_trader_types * equal_ratio_n
-    #
-    # fname = 'balances_%03d.csv' % equal_ratio_n
-    #
-    # tdump = open(fname, 'w')
-    #
-    # min_n = 1
-    #
-    # trialnumber = 1
-    # trdr_1_n = min_n
-    # while trdr_1_n <= n_traders:
-    #     trdr_2_n = min_n
-    #     while trdr_2_n <= n_traders - trdr_1_n:
-    #         trdr_3_n = min_n
-    #         while trdr_3_n <= n_traders - (trdr_1_n + trdr_2_n):
-    #             trdr_4_n = n_traders - (trdr_1_n + trdr_2_n + trdr_3_n)
-    #             if trdr_4_n >= min_n:
-    #                 buyers_spec = [('GVWY', trdr_1_n), ('SHVR', trdr_2_n),
-    #                                ('ZIC', trdr_3_n), ('ZIP', trdr_4_n)]
-    #                 sellers_spec = buyers_spec
-    #                 traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
-    #                 # print buyers_spec
-    #                 trial = 1
-    #                 while trial <= n_trials_per_ratio:
-    #                     trial_id = 'trial%07d' % trialnumber
-    #                     market_session(trial_id, start_time, end_time, traders_spec,
-    #                                    order_sched, tdump, False, True)
-    #                     tdump.flush()
-    #                     trial = trial + 1
-    #                     trialnumber = trialnumber + 1
-    #             trdr_3_n += 1
-    #         trdr_2_n += 1
-    #     trdr_1_n += 1
-    # tdump.close()
-    #
-    # print(trialnumber)
+#=================================================
