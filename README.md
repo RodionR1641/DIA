@@ -1,3 +1,5 @@
+link: https://github.com/RodionR1641/DIA
+
 Modification of the BSE environment that introduces noise and uncertainty experiments for traders. Includes time delays, market shocks and new insider trading agent
 
 major changes/additions are identified by "#==========" comments
