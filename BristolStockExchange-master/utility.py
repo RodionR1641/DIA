@@ -13,5 +13,4 @@ def delete_csv():
             file_path = os.path.join(csv_directory, filename)
             os.remove(file_path)
 
-
 #================================
